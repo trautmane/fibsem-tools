@@ -3,10 +3,8 @@
 # setup.py file adapted from https://github.com/navdeep-G/setup.py
 import io
 import os
-import sys
-from shutil import rmtree
 
-from setuptools import find_packages, setup, Command
+from setuptools import find_packages, setup
 
 NAME = "fst"
 DESCRIPTION = "Tools for processing FIB-SEM data."
@@ -15,7 +13,7 @@ EMAIL = "bennettd@janelia.hhmi.org"
 AUTHOR = "Davis Bennett"
 REQUIRES_PYTHON = ">=3.7.0"
 VERSION = "0.1.0"
-REQUIRED = ["dask", "numpy", "zarr", "dask_jobqueue", "xarray"]
+REQUIRED = ["dask", "numpy", "zarr", "dask_jobqueue", "xarray", 'distributed']
 
 EXTRAS = {}
 
