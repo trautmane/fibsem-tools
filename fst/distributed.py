@@ -96,6 +96,8 @@ def get_cluster(**kwargs):
     else:
         if 'host' not in kwargs:
             kwargs['host'] = ''
+        if 'project' in kwargs:
+            del kwargs['project']
         cluster = LocalCluster(**kwargs)
 
     client = Client(cluster)    
