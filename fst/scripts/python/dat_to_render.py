@@ -14,9 +14,7 @@ import time
 import traceback
 from glob import glob
 
-from distributed import Client, LocalCluster
-
-from fst.distributed import bsub_available, get_jobqueue_cluster
+from fst.distributed import get_cluster
 from fst.io import read
 
 # the name of this program
@@ -216,7 +214,7 @@ def save_tile_specs(tile_specs, to_dir):
         logger.info(f'save_tile_specs: wrote {tile_specs_file_name}')
 
 
-def load_dat_file_names(path_list):
+def load_dat_file_names(path_list, start_index, stop_index):
 
     logger.info(f"load_dat_file_names: loading file names from {path_list} ...")
 
@@ -233,8 +231,15 @@ def load_dat_file_names(path_list):
         raise ValueError(f"No .dat files found in {path_list}")
     else:
         dat_file_names = sorted(dat_file_names)
+        total_number_of_file_names = len(dat_file_names)
+        defined_stop_index = stop_index if stop_index else total_number_of_file_names
+        if start_index > 0 or defined_stop_index < total_number_of_file_names:
+            dat_file_names = dat_file_names[start_index:defined_stop_index]
+            count_msg = f"{len(dat_file_names)} out of {total_number_of_file_names}"
+        else:
+            count_msg = f"{total_number_of_file_names}"
 
-    logger.info(f"load_dat_file_names: loaded {len(dat_file_names)} file names")
+    logger.info(f"load_dat_file_names: loaded {count_msg} file names")
 
     return dat_file_names
 
@@ -258,21 +263,6 @@ def load_split_layer_group_data(path):
             layer_groups.append(layer_group)
 
     return dat_file_names, layer_groups
-
-
-def prepare_cluster(bill_to_project):
-
-    if bsub_available():
-        cluster = get_jobqueue_cluster(project=bill_to_project)
-    else:
-        cluster = LocalCluster(threads_per_worker=2)
-
-    dask_client = Client(cluster)
-    logger.info(
-        f"Cluster initialized. View status at {cluster.dashboard_link}"
-    )
-
-    return dask_client
 
 
 def create_mask_if_missing(image_width, image_height, mask_width, mask_dir, mask_errors):
@@ -401,9 +391,26 @@ def main(arg_list):
         nargs="+"
     )
     parser.add_argument(
+        "--source_start_index",
+        help="Specify start index for first (sorted) dat file to process",
+        type=int,
+        default=0
+    )
+    parser.add_argument(
+        "--source_stop_index",
+        help="Specify stop index for first (sorted) dat file to exclude from processing "
+             "(omit to include all dat files after the start index)",
+        type=int
+    )
+    parser.add_argument(
         "--debug_parent_dir",
         help="Parent directory for run specific directory where intermediate debug data "
              "(like tile specs) should be stored (if omitted, intermediate data is not saved)",
+    )
+    parser.add_argument(
+        "--dask_worker_space",
+        help="Directory for Dask worker data",
+        default="/Users/trautmane/Desktop/dask-worker-space"
     )
     parser.add_argument(
         "--num_workers",
@@ -471,10 +478,10 @@ def main(arg_list):
         os.mkdir(debug_dir)
 
     # dat_file_names, split_layer_groups = load_split_layer_group_data(args.source)
-    prepare_cluster(args.bill_project)
+    client = get_cluster(threads_per_worker=1, project=args.bill_project, local_directory=args.dask_worker_space)
+    logger.info(f'observe progress at {client.cluster.dashboard_link}')
 
-    dat_file_names = load_dat_file_names(args.source)
-    dat_file_names = dat_file_names[2000:3000]
+    dat_file_names = load_dat_file_names(args.source, args.source_start_index, args.source_stop_index)
 
     split_dat_file_names = split_list_for_workers(dat_file_names, args.num_workers)
     bag = db.from_sequence(split_dat_file_names, npartitions=args.num_workers).map(build_layer_groups)
@@ -540,7 +547,10 @@ if __name__ == "__main__":
 
     # test_argv = [
     #     "--source", "/Volumes/flyem/data/Z1217-19m_VNC_Sec06/dat",
+    #     "--source_start_index", "2000",
+    #     "--source_stop_index", "3000",
     #     "--num_workers", "3",
+    #     "--dask_worker_space", "/Users/trautmane/Desktop/dask-worker-space",
     #     "--image_dir", "/groups/flyem/data/Z1217-19m_VNC_Sec06/InLens",
     #     "--mask_dir", "/groups/flyem/data/render/pre_iso/masks",
     #     "--render_connect_json", "/Users/trautmane/Desktop/dat_to_render/render_connect.json"
