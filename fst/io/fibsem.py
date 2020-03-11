@@ -115,7 +115,7 @@ def _read_header(fobj):
     fobj.seek(0, os.SEEK_SET)
     if fibsem_header.FileMagicNum != MAGIC_NUMBER:
         raise RuntimeError(
-            f"FileMagicNum should be {MAGIC_NUMBER} but is {fibsem_header.FileMagicNum}"
+            f"FileMagicNum should be {MAGIC_NUMBER} but is {fibsem_header.FileMagicNum} for {fobj.name}"
         )
 
     _scaling_offset = 36
@@ -609,7 +609,8 @@ def read_fibsem(path: Union[str, Path, Iterable[str], Iterable[Path]]):
     elif isinstance(path, Iterable):
         return [_read(p) for p in path]
     else:
-        raise ValueError("Path must be an instance of string or pathlib.Path, or iterable of strings / pathlib.Paths")
+        raise ValueError(
+            f"Path '{path}' must be an instance of string or pathlib.Path, or iterable of strings / pathlib.Paths")
 
 
 def _convert_data(fibsem):
