@@ -557,4 +557,4 @@ if __name__ == "__main__":
     # ]
     # main(test_argv)
 
-    main(sys.argv)
+    main(sys.argv[1:])
