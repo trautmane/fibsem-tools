@@ -101,6 +101,7 @@ def get_layer_group(dat_file_names, dat_start_index, split_layer_groups):
     first_tile_header = headers[0]
     dat_file_name = dat_file_names[dat_start_index]
     base_id, acquire_time = get_base_id_and_time(dat_file_name)
+    first_base_id = base_id
     unique_header_data_for_tile = {"workingDistance": first_tile_header["WD"]}
     layer = {dat_file_name: unique_header_data_for_tile}
     layers = []
@@ -136,6 +137,10 @@ def get_layer_group(dat_file_names, dat_start_index, split_layer_groups):
 
         if restart_condition:
             add_layer_to_group = (not tiles_per_layer) or (tiles_per_layer == len(layer.keys()))
+            if not add_layer_to_group:
+                restart_condition = \
+                    f'{restart_condition}, not adding {len(layer.keys())} tile layer with ' \
+                    f'tile {previous_base_id} to {tiles_per_layer} tile layer group'
         else:
             if time_delta.seconds == 0:
                 # logger.info(f'add {base_id} to layer')
@@ -171,12 +176,18 @@ def get_layer_group(dat_file_names, dat_start_index, split_layer_groups):
         layers.append(layer)
         tiles_per_layer = len(layer)
 
+    tiles_in_group = len(layers) * tiles_per_layer
+    last_dat_in_group = sorted(layers[-1].keys())[-1]
+    last_base_id, last_acquire_time = get_base_id_and_time(last_dat_in_group)
+    logger.info(f'get_layer_group: returning group with {tiles_in_group} tiles '
+                f'across {len(layers)} layers from {first_base_id} to {last_base_id}')
+
     return {
         "firstTileHeader": first_tile_header,
         "firstTilePath": dat_file_names[dat_start_index],
         "restartCondition": restart_condition,
         "tilesPerLayer": tiles_per_layer,
-        "tilesInGroup": len(layers) * tiles_per_layer,
+        "tilesInGroup": tiles_in_group,
         "layers": layers
     }
 
@@ -550,12 +561,12 @@ def main(arg_list):
 if __name__ == "__main__":
 
     # test_argv = [
-    #     "--source", "/Volumes/flyem/data/Z1217-19m_VNC_Sec06/dat",
-    #     "--source_start_index", "2000",
-    #     "--source_stop_index", "3000",
-    #     "--num_workers", "3",
+    #     "--source", "/Volumes/flyem/data/Z1217-33m_BR_Sec10/dat",
+    #     "--source_start_index", "70951",
+    #     "--source_stop_index", "70970",
+    #     "--num_workers", "1",
     #     "--dask_worker_space", "/Users/trautmane/Desktop/dask-worker-space",
-    #     "--image_dir", "/groups/flyem/data/Z1217-19m_VNC_Sec06/InLens",
+    #     "--image_dir", "/groups/flyem/data/Z1217-33m_BR_Sec10/InLens",
     #     "--mask_dir", "/groups/flyem/data/render/pre_iso/masks",
     #     "--render_connect_json", "/Users/trautmane/Desktop/dat_to_render/render_connect.json"
     # ]
