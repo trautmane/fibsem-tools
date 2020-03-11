@@ -478,10 +478,14 @@ def main(arg_list):
         os.mkdir(debug_dir)
 
     # dat_file_names, split_layer_groups = load_split_layer_group_data(args.source)
-    client = get_cluster(threads_per_worker=1, project=args.bill_project, local_directory=args.dask_worker_space)
-    logger.info(f'observe progress at {client.cluster.dashboard_link}')
 
     dat_file_names = load_dat_file_names(args.source, args.source_start_index, args.source_stop_index)
+
+    dask_client = get_cluster(threads_per_worker=1, project=args.bill_project, local_directory=args.dask_worker_space)
+    logger.info(f'observe dask cluster information at {dask_client.cluster.dashboard_link}')
+
+    dask_client.cluster.scale(args.num_workers)
+    logger.info(f'scaled dask cluster to {args.num_workers} workers')
 
     split_dat_file_names = split_list_for_workers(dat_file_names, args.num_workers)
     bag = db.from_sequence(split_dat_file_names, npartitions=args.num_workers).map(build_layer_groups)
