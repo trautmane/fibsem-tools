@@ -59,7 +59,9 @@ def read_next_header_batch(dat_file_names, current_index, split_layer_groups):
         if last_header_index - current_index > max_records_to_read:
             last_header_index = current_index + max_records_to_read
 
-        logger.info(f'read_next_header_batch: loading tiles {current_index + 1} to {last_header_index}')
+        logger.info(f'read_next_header_batch: loading tiles {current_index + 1} to {last_header_index} '
+                    f'of {len(dat_file_names)}')
+        
         records = read(dat_file_names[current_index:last_header_index], lazy=False)
         headers = []
         for record in records:
@@ -501,10 +503,14 @@ def main(arg_list):
     split_dat_file_names = split_list_for_workers(dat_file_names, args.num_workers)
     bag = db.from_sequence(split_dat_file_names, npartitions=args.num_workers).map(build_layer_groups)
     split_layer_groups = flatten_list_of_lists(bag.compute())
+
+    logger.info(f'merging {len(split_layer_groups)} split layer groups from workers')
     layer_groups = build_layer_groups(dat_file_names, split_layer_groups)
 
     if debug_dir:
         save_layer_groups(layer_groups, debug_dir)
+
+    logger.info(f'generating tile specs and masks for {len(layer_groups)} (merged) layer groups')
 
     mask_errors = {}
     group_start_z = 1
