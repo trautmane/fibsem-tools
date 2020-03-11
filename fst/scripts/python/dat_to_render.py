@@ -22,7 +22,7 @@ program_name = "dat_to_render.py"
 
 # set up logging
 logger = logging.getLogger(program_name)
-c_handler = logging.StreamHandler()
+c_handler = logging.StreamHandler(sys.stdout)
 c_formatter = logging.Formatter("%(asctime)s [%(threadName)s] [%(name)s] [%(levelname)s] %(message)s")
 c_handler.setFormatter(c_formatter)
 logger.addHandler(c_handler)
