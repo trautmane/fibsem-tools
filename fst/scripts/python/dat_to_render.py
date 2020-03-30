@@ -34,7 +34,10 @@ render_api_logger.addHandler(c_handler)
 
 # Merlin-6049_15-06-16_000059_0-0-0-InLens.png
 base_name_pattern = re.compile(r".*((\d\d-\d\d-\d\d_\d{6})_\d-(\d)-(\d)).*")
-common_tile_header_keys = ["XResolution", "YResolution", "PixelSize", "EightBit", "ChanNum", "SWdate"]
+common_tile_header_keys = [
+    "XResolution", "YResolution", "PixelSize", "EightBit", "ChanNum", "SWdate",
+    "StageX", "StageY", "StageZ", "StageR"
+]
 retained_tile_header_keys = common_tile_header_keys + ["WD"]
 
 
@@ -86,14 +89,15 @@ def validate_header_consistency(group_header, previous_base_id, header, base_id)
 
     for k in common_tile_header_keys:
         if header[k] != group_header[k]:
-            return f'{k} value of {group_header[k]} for {previous_base_id} changed to {header[k]} for {base_id}'
-
+            return f'change_header_{k.lower()}: ' \
+                   f'{k} value of {group_header[k]} for {previous_base_id} ' \
+                   f'changed to {header[k]} for {base_id}'
     return None
 
 
 def get_layer_group(dat_file_names, dat_start_index, split_layer_groups):
 
-    seconds_in_one_hour = 60 * 60
+    seconds_in_thirty_minutes = 30 * 60
 
     total_tile_count = len(dat_file_names)
     first_header_index, last_header_index, headers = read_next_header_batch(dat_file_names,
@@ -130,8 +134,8 @@ def get_layer_group(dat_file_names, dat_start_index, split_layer_groups):
 
         time_delta = acquire_time - previous_acquire_time
 
-        if time_delta.seconds > seconds_in_one_hour:
-            restart_condition = f'tile {base_id} acquired {time_delta.seconds} seconds after tile {previous_base_id}'
+        if time_delta.seconds > seconds_in_thirty_minutes:
+            restart_condition = f'change_time: tile {base_id} acquired {time_delta.seconds} seconds after tile {previous_base_id}'
         else:
             restart_condition = validate_header_consistency(first_tile_header, previous_base_id, header, base_id)
 
@@ -159,7 +163,7 @@ def get_layer_group(dat_file_names, dat_start_index, split_layer_groups):
             inconsistent_tile_count = tiles_per_layer and tiles_per_layer != len(layer.keys())
             if inconsistent_tile_count:
                 restart_condition = \
-                    f'layer with tile {base_id} has {len(layer.keys())} instead of {tiles_per_layer} tiles'
+                    f'change_tile_count: layer with tile {base_id} has {len(layer.keys())} instead of {tiles_per_layer} tiles'
             else:
                 tiles_per_layer = len(layer.keys())
                 layers.append(layer)
@@ -514,6 +518,7 @@ def main(arg_list):
 
     mask_errors = {}
     group_start_z = 1
+    prior_group_restart_condition = None
     for layer_group in layer_groups:
 
         header = layer_group["firstTileHeader"]
@@ -531,6 +536,10 @@ def main(arg_list):
                                                           args.image_dir,
                                                           mask_path,
                                                           args.tile_overlap_in_microns)
+
+        if prior_group_restart_condition:
+            details_label = prior_group_restart_condition[0:prior_group_restart_condition.index(":")]
+            tile_specs_for_group[0]["labels"] = ["restart", details_label]
 
         if debug_dir:
             save_tile_specs(tile_specs_for_group, debug_dir)
@@ -556,6 +565,7 @@ def main(arg_list):
         renderapi.stack.set_stack_state(stack, 'COMPLETE', render=render)
 
         group_start_z += len(layer_group["layers"])
+        prior_group_restart_condition = layer_group["restartCondition"]
 
     logger.info(f"mask errors are: {mask_errors}")
 
