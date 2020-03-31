@@ -135,7 +135,7 @@ def get_layer_group(dat_file_names, dat_start_index, split_layer_groups):
         time_delta = acquire_time - previous_acquire_time
 
         if time_delta.seconds > seconds_in_thirty_minutes:
-            restart_condition = f'change_time: tile {base_id} acquired {time_delta.seconds} seconds after tile {previous_base_id}'
+            restart_condition = f'acquisition_delay: tile {base_id} acquired {time_delta.seconds} seconds after tile {previous_base_id}'
         else:
             restart_condition = validate_header_consistency(first_tile_header, previous_base_id, header, base_id)
 
