@@ -110,6 +110,12 @@ def _read_header(fobj):
     )
     # read initial header
     base_header = np.fromfile(fobj, dtype=header_dtype.dtype, count=1)
+
+    if len(base_header) == 0:
+        raise RuntimeError(
+            f"Base header is missing for {fobj.name}"
+        )
+
     fibsem_header = FIBSEMHeader(**dict(zip(base_header.dtype.names, base_header[0])))
     # now fobj is at position 34, return to 0
     fobj.seek(0, os.SEEK_SET)
