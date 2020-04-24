@@ -39,6 +39,7 @@ common_tile_header_keys = [
     "StageX", "StageY", "StageZ", "StageR"
 ]
 retained_tile_header_keys = common_tile_header_keys + ["WD"]
+checked_tile_header_keys = common_tile_header_keys + ["TabID"]
 
 
 def read_next_header_batch(dat_file_names, current_index, split_layer_groups):
@@ -71,6 +72,11 @@ def read_next_header_batch(dat_file_names, current_index, split_layer_groups):
             header = {}
             for key in retained_tile_header_keys:
                 header[key] = record.header.__dict__[key]
+
+            # "Z1217-33m_BR_Sec10, BF 316x100um, 24s @11.5nA /8nm @15nA-1, lens2 14110-40V..., bias 0V, deflector +100V"
+            notes = record.header.__dict__["Notes"]
+            header["TabID"] = notes[0:notes.find(",")]
+            
             headers.append(header)
 
     return current_index, last_header_index, headers
@@ -420,6 +426,11 @@ def main(arg_list):
         type=int
     )
     parser.add_argument(
+        "--base_stack_name",
+        help="Prefix for all generated render stacks",
+        default="v1_acquire"
+    )
+    parser.add_argument(
         "--debug_parent_dir",
         help="Parent directory for run specific directory where intermediate debug data "
              "(like tile specs) should be stored (if omitted, intermediate data is not saved)",
@@ -545,7 +556,7 @@ def main(arg_list):
             save_tile_specs(tile_specs_for_group, debug_dir)
 
         group_stop_z = group_start_z + len(layer_group["layers"]) - 1
-        stack = f'v1_acquire_{group_start_z:06d}_to_{group_stop_z:06d}'
+        stack = f'{args.base_stack_name}_{group_start_z:06d}_to_{group_stop_z:06d}'
 
         resolution_xy = round(header["PixelSize"])
         resolution_z = math.floor(header["WD"])
