@@ -141,7 +141,8 @@ def get_layer_group(dat_file_names, dat_start_index, split_layer_groups):
         time_delta = acquire_time - previous_acquire_time
 
         if time_delta.seconds > seconds_in_thirty_minutes:
-            restart_condition = f'acquisition_delay: tile {base_id} acquired {time_delta.seconds} seconds after tile {previous_base_id}'
+            restart_condition = \
+                f'acquisition_delay: tile {base_id} acquired {time_delta.seconds} seconds after tile {previous_base_id}'
         else:
             restart_condition = validate_header_consistency(first_tile_header, previous_base_id, header, base_id)
 
@@ -168,8 +169,8 @@ def get_layer_group(dat_file_names, dat_start_index, split_layer_groups):
             
             inconsistent_tile_count = tiles_per_layer and tiles_per_layer != len(layer.keys())
             if inconsistent_tile_count:
-                restart_condition = \
-                    f'change_tile_count: layer with tile {base_id} has {len(layer.keys())} instead of {tiles_per_layer} tiles'
+                restart_condition = "change_tile_count: " \
+                    f'layer with tile {base_id} has {len(layer.keys())} instead of {tiles_per_layer} tiles'
             else:
                 tiles_per_layer = len(layer.keys())
                 layers.append(layer)
@@ -226,15 +227,6 @@ def save_layer_groups(layer_groups, to_dir):
         with open(layer_group_file_name, 'w') as json_file:
             json.dump(layer_group, json_file, default=str, indent=2)
             logger.info(f'save_layer_groups: wrote {layer_group_file_name}')
-
-
-def save_tile_specs(tile_specs, to_dir):
-
-    first_tile_id = tile_specs[0]["tileId"]
-    tile_specs_file_name = f'{to_dir}/tile_specs_{first_tile_id}.json'
-    with open(tile_specs_file_name, 'w') as json_file:
-        json.dump(tile_specs, json_file, default=str, indent=2)
-        logger.info(f'save_tile_specs: wrote {tile_specs_file_name}')
 
 
 def load_dat_file_names(path_list, start_index, stop_index):
@@ -400,6 +392,42 @@ def import_tile_specs(tile_specs, stack, render):
         renderapi.client.import_tilespecs(stack, tile_specs, render=render, use_rest=True)
 
 
+def patch_layer(previous_layer_specs, spec_from_layer_being_patched):
+    patch_section_id = spec_from_layer_being_patched["layout"]["sectionId"]
+
+    patched_tile_specs = []
+    for tile_spec in previous_layer_specs:
+        patched_tile_spec = copy.deepcopy(tile_spec)
+        patched_tile_spec["z"] = spec_from_layer_being_patched["z"]
+        previous_tile_id = tile_spec["tileId"]
+        base_tile_id = previous_tile_id[0:previous_tile_id.find('.')]  # tileId: 19-07-20_112626_0-0-2.9359.0
+        patched_tile_spec["tileId"] = f'{base_tile_id}.patch.{patch_section_id}'
+        patched_tile_spec["layout"]["sectionId"] = patch_section_id
+        patched_tile_spec["labels"] = spec_from_layer_being_patched["labels"]
+        patched_tile_specs.append(patched_tile_spec)
+
+    return patched_tile_specs
+
+
+def save_stack(stack_name, render, resolution_xy, resolution_z, tile_specs, num_workers):
+    renderapi.stack.create_stack(stack_name,
+                                 render=render,
+                                 stackResolutionX=resolution_xy,
+                                 stackResolutionY=resolution_xy,
+                                 stackResolutionZ=resolution_z)
+
+    api_tile_specs = [renderapi.tilespec.TileSpec(json=tile_spec) for tile_spec in tile_specs]
+
+    if num_workers > 1:
+        split_tile_specs = split_list_for_workers(api_tile_specs, num_workers)
+        bag = db.from_sequence(split_tile_specs, npartitions=num_workers).map(import_tile_specs, stack_name, render)
+        bag.compute()
+    else:
+        import_tile_specs(api_tile_specs, stack_name, render)
+
+    renderapi.stack.set_stack_state(stack_name, 'COMPLETE', render=render)
+
+
 def main(arg_list):
 
     start_time = time.time()
@@ -426,8 +454,8 @@ def main(arg_list):
         type=int
     )
     parser.add_argument(
-        "--base_stack_name",
-        help="Prefix for all generated render stacks",
+        "--stack_name",
+        help="Name for generated render stack",
         default="v1_acquire"
     )
     parser.add_argument(
@@ -530,9 +558,16 @@ def main(arg_list):
     mask_errors = {}
     group_start_z = 1
     prior_group_restart_condition = None
+    prior_last_layer_specs = None
+    all_tile_specs = []
+    all_restart_tile_specs = []
+    resolution_xy = None
+    resolution_z = None
     for layer_group in layer_groups:
 
         header = layer_group["firstTileHeader"]
+        resolution_xy = round(header["PixelSize"])
+        resolution_z = math.floor(header["WD"])
 
         mask_path = None
         if args.mask_dir:
@@ -548,35 +583,44 @@ def main(arg_list):
                                                           mask_path,
                                                           args.tile_overlap_in_microns)
 
+        tiles_per_layer = layer_group["tilesPerLayer"]
+        first_layer_specs = tile_specs_for_group[0:tiles_per_layer]
+        last_layer_specs = tile_specs_for_group[-tiles_per_layer:]
+
         if prior_group_restart_condition:
             details_label = prior_group_restart_condition[0:prior_group_restart_condition.index(":")]
-            tile_specs_for_group[0]["labels"] = ["restart", details_label]
 
-        if debug_dir:
-            save_tile_specs(tile_specs_for_group, debug_dir)
+            # if a group has only one layer, "patch" it with the previous layer's tile images
+            layer_to_be_patched = len(layer_group["layers"]) == 1
 
-        group_stop_z = group_start_z + len(layer_group["layers"]) - 1
-        stack = f'{args.base_stack_name}_{group_start_z:06d}_to_{group_stop_z:06d}'
+            for tile_spec in prior_last_layer_specs:
+                tile_spec["groupId"] = "restart"
+                all_restart_tile_specs.append(tile_spec)
+            for tile_spec in first_layer_specs:
+                tile_spec["labels"] = ["restart", details_label]
+                if layer_to_be_patched:
+                    tile_spec["labels"].append("patch")
+                tile_spec["groupId"] = "restart"
+                all_restart_tile_specs.append(tile_spec)
 
-        resolution_xy = round(header["PixelSize"])
-        resolution_z = math.floor(header["WD"])
+            if layer_to_be_patched:
+                patched_tile_specs = patch_layer(prior_last_layer_specs, first_layer_specs[0])
+                all_tile_specs.extend(patched_tile_specs)
+            else:
+                all_tile_specs.extend(tile_specs_for_group)
 
-        renderapi.stack.create_stack(stack,
-                                     render=render,
-                                     stackResolutionX=resolution_xy,
-                                     stackResolutionY=resolution_xy,
-                                     stackResolutionZ=resolution_z)
-
-        api_tile_specs = [renderapi.tilespec.TileSpec(json=tile_spec) for tile_spec in tile_specs_for_group]
-
-        split_tile_specs = split_list_for_workers(api_tile_specs, args.num_workers)
-        bag = db.from_sequence(split_tile_specs, npartitions=args.num_workers).map(import_tile_specs, stack, render)
-        bag.compute()
-
-        renderapi.stack.set_stack_state(stack, 'COMPLETE', render=render)
+        else:
+            all_tile_specs.extend(tile_specs_for_group)
 
         group_start_z += len(layer_group["layers"])
         prior_group_restart_condition = layer_group["restartCondition"]
+        prior_last_layer_specs = last_layer_specs
+
+    if len(all_restart_tile_specs) > 0:
+        stack_name = f'{args.stack_name}_restart'
+        save_stack(stack_name, render, resolution_xy, resolution_z, all_restart_tile_specs, 1)
+
+    save_stack(args.stack_name, render, resolution_xy, resolution_z, all_tile_specs, args.num_workers)
 
     logger.info(f"mask errors are: {mask_errors}")
 
