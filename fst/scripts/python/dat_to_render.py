@@ -504,6 +504,12 @@ def main(arg_list):
         help="JSON file containing render web service connection parameters",
         required=True
     )
+    parser.add_argument(
+        "--restart_context_layers",
+        help="Number of layers to include in the restart stack before and after each restart",
+        type=int,
+        default=1
+    )
 
     args = parser.parse_args(args=arg_list)
 
@@ -559,6 +565,7 @@ def main(arg_list):
     group_start_z = 1
     prior_group_restart_condition = None
     prior_last_layer_specs = None
+    pre_restart_specs = None
     all_tile_specs = []
     all_restart_tile_specs = []
     resolution_xy = None
@@ -595,13 +602,15 @@ def main(arg_list):
 
             for tile_spec in prior_last_layer_specs:
                 tile_spec["groupId"] = "restart"
-                all_restart_tile_specs.append(tile_spec)
             for tile_spec in first_layer_specs:
                 tile_spec["labels"] = ["restart", details_label]
                 if layer_to_be_patched:
                     tile_spec["labels"].append("patch")
                 tile_spec["groupId"] = "restart"
-                all_restart_tile_specs.append(tile_spec)
+
+            restart_index = min((args.restart_context_layers * tiles_per_layer), len(tile_specs_for_group))
+            all_restart_tile_specs.extend(pre_restart_specs)
+            all_restart_tile_specs.extend(tile_specs_for_group[0:restart_index])
 
             if layer_to_be_patched:
                 patched_tile_specs = patch_layer(prior_last_layer_specs, first_layer_specs[0])
@@ -615,6 +624,8 @@ def main(arg_list):
         group_start_z += len(layer_group["layers"])
         prior_group_restart_condition = layer_group["restartCondition"]
         prior_last_layer_specs = last_layer_specs
+        restart_index = max(len(tile_specs_for_group) - (args.restart_context_layers * tiles_per_layer), 0)
+        pre_restart_specs = tile_specs_for_group[restart_index:]
 
     if len(all_restart_tile_specs) > 0:
         stack_name = f'{args.stack_name}_restart'
