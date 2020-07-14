@@ -553,7 +553,16 @@ def main(arg_list):
     bag = db.from_sequence(split_dat_file_names, npartitions=args.num_workers).map(build_layer_groups)
     split_layer_groups = flatten_list_of_lists(bag.compute())
 
-    logger.info(f'merging {len(split_layer_groups)} split layer groups from workers')
+    first_tab_id = None
+    for group in split_layer_groups:
+        first_tile_header = group["firstTileHeader"]
+        tab_id = first_tile_header["TabID"]
+        if first_tab_id:
+            assert (tab_id == first_tab_id), f'{group["firstTilePath"]} tab ID is {tab_id} but should be {first_tab_id}'
+        else:
+            first_tab_id = tab_id
+
+    logger.info(f'merging {len(split_layer_groups)} split layer groups from workers for tab {first_tab_id}')
     layer_groups = build_layer_groups(dat_file_names, split_layer_groups)
 
     if debug_dir:
