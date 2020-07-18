@@ -95,6 +95,17 @@ def validate_header_consistency(group_header, previous_base_id, header, base_id)
 
     for k in common_tile_header_keys:
         if header[k] != group_header[k]:
+
+            # From Shan:
+            #   Small PixelSize deltas are "due to the step change of the microscope magnification as
+            #   the working distance (WD) increases (material being milled away). Different tiles change at
+            #   different frames because they have different WD values. The magnification might have a small
+            #   step jump when this happens which I think will be taken care of by SIFT."
+            if k == "PixelSize":
+                delta = abs(float(header[k]) - float(group_header[k]))
+                if delta < 0.5:
+                    continue
+
             return f'change_header_{k.lower()}: ' \
                    f'{k} value of {group_header[k]} for {previous_base_id} ' \
                    f'changed to {header[k]} for {base_id}'
