@@ -68,7 +68,8 @@ def read_next_header_batch(dat_file_names, current_index, split_layer_groups):
         
         records = read(dat_file_names[current_index:last_header_index], lazy=False)
         headers = []
-        for record in records:
+        for i in range(0, len(records)):
+            record = records[i]
             header = {}
             for key in retained_tile_header_keys:
                 header[key] = record.header.__dict__[key]
@@ -76,7 +77,12 @@ def read_next_header_batch(dat_file_names, current_index, split_layer_groups):
             # "Z1217-33m_BR_Sec10, BF 316x100um, 24s @11.5nA /8nm @15nA-1, lens2 14110-40V..., bias 0V, deflector +100V"
             notes = record.header.__dict__["Notes"]
             header["TabID"] = notes[0:notes.find(",")]
-            
+
+            if header["PixelSize"] == 0:
+                raise RuntimeError(
+                    f"Header PixelSize is zero for {dat_file_names[current_index + i]}"
+                )
+
             headers.append(header)
 
     return current_index, last_header_index, headers
