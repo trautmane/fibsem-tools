@@ -12,6 +12,9 @@
 
 from shutil import which
 import dask
+
+dask.config.set({"jobqueue.lsf.use-stdin": True})
+dask.config.set({"distributed.comm.timeouts.connect": 60})
 import dask.array as da
 from distributed import Client, LocalCluster
 from dask_jobqueue import LSFCluster
@@ -20,7 +23,6 @@ import numpy as np
 from pathlib import Path
 
 # this is necessary to ensure that workers get the job script from stdin
-dask.config.set({"jobqueue.lsf.use-stdin": True})
 
 
 def get_jobqueue_cluster(
@@ -29,7 +31,8 @@ def get_jobqueue_cluster(
     cores=1,
     memory="16GB",
     threads_per_worker=1,
-    **kwargs
+    death_timeout="600s",
+    **kwargs,
 ):
     """
     Instantiate a dask_jobqueue cluster using the LSF scheduler on the Janelia Research Campus compute cluster.
@@ -47,27 +50,27 @@ def get_jobqueue_cluster(
             "export OMP_NUM_THREADS=1",
         ]
     else:
-        raise ValueError('threads_per_worker can only be 1')
+        raise ValueError("threads_per_worker can only be 1")
 
     USER = os.environ["USER"]
     HOME = os.environ["HOME"]
-    
+
     if "local_directory" not in kwargs:
         kwargs["local_directory"] = f"/scratch/{USER}/"
-    
+
     if "log_directory" not in kwargs:
         log_dir = f"{HOME}/.dask_distributed/"
         Path(log_dir).mkdir(parents=False, exist_ok=True)
         kwargs["log_directory"] = log_dir
-    
+
     cluster = LSFCluster(
-        queue="normal",
         walltime=walltime,
         cores=cores,
         ncpus=ncpus,
         memory=memory,
         env_extra=env_extra,
-        **kwargs
+        death_timeout=death_timeout,
+        **kwargs,
     )
     return cluster
 
@@ -94,13 +97,11 @@ def get_cluster(**kwargs):
     if bsub_available():
         cluster = get_jobqueue_cluster(**kwargs)
     else:
-        if 'host' not in kwargs:
-            kwargs['host'] = ''
-        if 'project' in kwargs:
-            del kwargs['project']
+        if "host" not in kwargs:
+            kwargs["host"] = ""
         cluster = LocalCluster(**kwargs)
 
-    client = Client(cluster)    
+    client = Client(cluster, set_as_default=False)
     return client
 
 
