@@ -619,7 +619,7 @@ def read_fibsem(path: Union[str, Path, Iterable[str], Iterable[Path]]):
         return [_read(p) for p in path]
     else:
         raise ValueError(
-            "Path must be an instance of string or pathlib.Path, or iterable of strings / pathlib.Paths"
+            f"Path '{path}' must be an instance of string or pathlib.Path, or iterable of strings / pathlib.Paths"
         )
 
 
