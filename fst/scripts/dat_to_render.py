@@ -212,6 +212,7 @@ def get_layer_group(dat_file_names, dat_start_index, split_layer_groups):
     logger.info(f'get_layer_group: returning group with {tiles_in_group} tiles '
                 f'across {len(layers)} layers from {first_base_id} to {last_base_id}')
 
+    # TODO: from code review: consider use of data class (3.7)
     return {
         "firstTileHeader": first_tile_header,
         "firstTilePath": dat_file_names[dat_start_index],
@@ -343,7 +344,7 @@ def build_tile_spec(dat_file_name, z, tile_width, tile_height, overlap_pixels, w
     transform_data_string = f'1 0 0 1 {stage_x} {stage_y}'
 
     # TODO: handle 16-bit data (override min and max intensity values)
-
+    # TODO: from code review: parameterize intensity
     tile_spec = {
         "tileId": tile_id, "z": z,
         "minX": stage_x, "minY": stage_y, "maxX": stage_x + tile_width, "maxY": stage_y + tile_height,
@@ -364,6 +365,7 @@ def build_tile_spec(dat_file_name, z, tile_width, tile_height, overlap_pixels, w
         }
     }
 
+    # TODO: from code review: look at render-python class (or consider attrs.py model)
     # return renderapi.tilespec.TileSpec(json=tile_spec)
     return tile_spec
 
@@ -483,7 +485,6 @@ def main(arg_list):
     parser.add_argument(
         "--dask_worker_space",
         help="Directory for Dask worker data",
-        default="/Users/trautmane/Desktop/dask-worker-space"
     )
     parser.add_argument(
         "--num_workers",
