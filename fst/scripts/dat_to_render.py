@@ -38,8 +38,8 @@ common_tile_header_keys = [
     "XResolution", "YResolution", "PixelSize", "EightBit", "ChanNum", "SWdate",
     "StageX", "StageY", "StageZ", "StageR"
 ]
-retained_tile_header_keys = common_tile_header_keys + ["WD"]
-checked_tile_header_keys = common_tile_header_keys + ["TabID"]
+retained_tile_header_keys = common_tile_header_keys + ["WD", "Restart", "StageMove", "FirstX", "FirstY"]
+checked_tile_header_keys = common_tile_header_keys + ["SampleID"]
 
 
 def read_next_header_batch(dat_file_names, current_index, split_layer_groups):
@@ -72,11 +72,15 @@ def read_next_header_batch(dat_file_names, current_index, split_layer_groups):
             record = records[i]
             header = {}
             for key in retained_tile_header_keys:
-                header[key] = record.header.__dict__[key]
+                if key in record.header.__dict__:
+                    header[key] = record.header.__dict__[key]
 
             # "Z1217-33m_BR_Sec10, BF 316x100um, 24s @11.5nA /8nm @15nA-1, lens2 14110-40V..., bias 0V, deflector +100V"
-            notes = record.header.__dict__["Notes"]
-            header["TabID"] = notes[0:notes.find(",")]
+            if "SampleID" in record.header.__dict__:
+                header["SampleID"] = record.header.__dict__["SampleID"]
+            else:
+                notes = record.header.__dict__["Notes"]
+                header["SampleID"] = notes[0:notes.find(",")]
 
             if header["PixelSize"] == 0:
                 raise RuntimeError(
@@ -153,7 +157,11 @@ def get_layer_group(dat_file_names, dat_start_index, split_layer_groups):
         header = headers[i - first_header_index]
         dat_file_name = dat_file_names[i]
         base_id, acquire_time = get_base_id_and_time(dat_file_name)
-        unique_header_data_for_tile = {"workingDistance": header["WD"]}
+        unique_header_data_for_tile = {
+            "workingDistance": header["WD"],
+            "stageX": header.get("FirstX", None),
+            "stageY": header.get("FirstY", None)
+        }
 
         time_delta = acquire_time - previous_acquire_time
 
@@ -322,7 +330,7 @@ def create_mask_if_missing(image_width, image_height, mask_width, mask_dir, mask
     return mask_path
 
 
-def build_tile_spec(dat_file_name, z, tile_width, tile_height, overlap_pixels, working_distance, image_dir, mask_path):
+def build_tile_spec(dat_file_name, z, tile_width, tile_height, overlap_pixels, tile_attributes, image_dir, mask_path):
 
     m = base_name_pattern.match(dat_file_name)
     base_id = m.group(1)
@@ -333,8 +341,12 @@ def build_tile_spec(dat_file_name, z, tile_width, tile_height, overlap_pixels, w
     tile_id = f'{base_id}.{section_id}'
 
     margin = 400  # offset everything a little to help viewers that have trouble with negative space
-    stage_x = margin + round(image_col * (tile_width - overlap_pixels))
-    stage_y = margin + round(image_row * (tile_height - overlap_pixels))
+    default_stage_x = margin + round(image_col * (tile_width - overlap_pixels))
+    default_stage_y = margin + round(image_row * (tile_height - overlap_pixels))
+
+    working_distance = tile_attributes["workingDistance"]
+    stage_x = tile_attributes.get("StageX", default_stage_x)
+    stage_y = tile_attributes.get("StageY", default_stage_y)
 
     image_path = f'{image_dir}/{os.path.basename(dat_file_name)[:-4]}-InLens.png'
     mipmap_level_zero = {"imageUrl": f'file:{image_path}'}
@@ -386,10 +398,9 @@ def build_tile_specs_for_group(layer_group, group_start_z, image_dir, mask_path,
 
         for dat_file_name in sorted(layer.keys()):
             tile_attributes = layer[dat_file_name]
-            working_distance = tile_attributes["workingDistance"]
             tile_specs.append(
-                build_tile_spec(dat_file_name, z,
-                                tile_width, tile_height, overlap_pixels, working_distance, image_dir, mask_path))
+                build_tile_spec(dat_file_name, z, tile_width, tile_height, overlap_pixels, tile_attributes,
+                                image_dir, mask_path))
 
         z += 1
 
@@ -574,7 +585,7 @@ def main(arg_list):
     first_tab_id = None
     for group in split_layer_groups:
         first_tile_header = group["firstTileHeader"]
-        tab_id = first_tile_header["TabID"]
+        tab_id = first_tile_header["SampleID"]
         if first_tab_id:
             assert (tab_id == first_tab_id), f'{group["firstTilePath"]} tab ID is {tab_id} but should be {first_tab_id}'
         else:

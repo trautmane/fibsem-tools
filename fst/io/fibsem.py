@@ -146,6 +146,13 @@ def _read_header(path):
             # Read in AI channel scaling factors, (col#: AI#), (row#: offset, gain, 2nd order, 3rd order)
             header_dtype.update("Scaling", (">f4", (2, 4)), _scaling_offset)
 
+        if fibsem_header.FileVersion >= 9:
+            header_dtype.update(
+                ["Restart", "StageMove", "FirstX", "FirstY"],
+                [">u1", ">u1", ">i4", ">i4"],
+                [68, 69, 70, 74],
+            )
+
         header_dtype.update(
             ["XResolution", "YResolution"],  # X Resolution  # Y Resolution
             [">u4", ">u4"],
@@ -196,10 +203,22 @@ def _read_header(path):
                 "AI2",  # AI Ch2
                 "AI3",  # AI Ch3
                 "AI4",  # AI Ch4
-                "Notes",  # Read in notes
             ],
-            [">u1", ">u1", ">u1", ">u1", ">S200"],
-            [151, 152, 153, 154, 180],
+            [">u1", ">u1", ">u1", ">u1"],
+            [151, 152, 153, 154],
+        )
+
+        if fibsem_header.FileVersion >= 9:
+            header_dtype.update(
+                ["SampleID"],
+                ["S25"],
+                [155],
+            )
+
+        header_dtype.update(
+            ["Notes"],
+            [">S200"],
+            [180],
         )
 
         if fibsem_header.FileVersion in {1, 2}:
