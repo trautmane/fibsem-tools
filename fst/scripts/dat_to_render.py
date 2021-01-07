@@ -159,8 +159,8 @@ def get_layer_group(dat_file_names, dat_start_index, split_layer_groups):
         base_id, acquire_time = get_base_id_and_time(dat_file_name)
         unique_header_data_for_tile = {
             "workingDistance": header["WD"],
-            "stageX": header.get("FirstX", None),
-            "stageY": header.get("FirstY", None)
+            "FirstX": header.get("FirstX", None),
+            "FirstY": header.get("FirstY", None)
         }
 
         time_delta = acquire_time - previous_acquire_time
@@ -345,8 +345,8 @@ def build_tile_spec(dat_file_name, z, tile_width, tile_height, overlap_pixels, t
     default_stage_y = margin + round(image_row * (tile_height - overlap_pixels))
 
     working_distance = tile_attributes["workingDistance"]
-    stage_x = tile_attributes.get("StageX", default_stage_x)
-    stage_y = tile_attributes.get("StageY", default_stage_y)
+    stage_x = tile_attributes.get("FirstX", default_stage_x)
+    stage_y = tile_attributes.get("FirstY", default_stage_y)
 
     image_path = f'{image_dir}/{os.path.basename(dat_file_name)[:-4]}-InLens.png'
     mipmap_level_zero = {"imageUrl": f'file:{image_path}'}
