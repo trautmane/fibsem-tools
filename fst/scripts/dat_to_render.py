@@ -38,7 +38,8 @@ common_tile_header_keys = [
     "XResolution", "YResolution", "PixelSize", "EightBit", "ChanNum", "SWdate",
     "StageX", "StageY", "StageZ", "StageR"
 ]
-retained_tile_header_keys = common_tile_header_keys + ["WD", "Restart", "StageMove", "FirstX", "FirstY"]
+unique_tile_header_keys = ["WD", "Restart", "StageMove", "FirstX", "FirstY"]
+retained_tile_header_keys = common_tile_header_keys + unique_tile_header_keys
 checked_tile_header_keys = common_tile_header_keys + ["SampleID"]
 
 
@@ -54,7 +55,8 @@ def read_next_header_batch(dat_file_names, current_index, split_layer_groups):
                 for dat in layer.keys():
                     if header_index >= current_index:
                         header = copy.deepcopy(layer_group["firstTileHeader"])
-                        header["WD"] = layer[dat]["workingDistance"]
+                        for key in unique_tile_header_keys:
+                            header[key] = layer[dat][key]
                         headers.append(header)
                     header_index += 1
 
@@ -135,7 +137,11 @@ def get_layer_group(dat_file_names, dat_start_index, split_layer_groups):
     dat_file_name = dat_file_names[dat_start_index]
     base_id, acquire_time = get_base_id_and_time(dat_file_name)
     first_base_id = base_id
-    unique_header_data_for_tile = {"workingDistance": first_tile_header["WD"]}
+    unique_header_data_for_tile = {
+        "WD": first_tile_header["WD"],
+        "FirstX": first_tile_header.get("FirstX", None),
+        "FirstY": first_tile_header.get("FirstY", None)
+    }
     layer = {dat_file_name: unique_header_data_for_tile}
     layers = []
 
@@ -158,7 +164,7 @@ def get_layer_group(dat_file_names, dat_start_index, split_layer_groups):
         dat_file_name = dat_file_names[i]
         base_id, acquire_time = get_base_id_and_time(dat_file_name)
         unique_header_data_for_tile = {
-            "workingDistance": header["WD"],
+            "WD": header["WD"],
             "FirstX": header.get("FirstX", None),
             "FirstY": header.get("FirstY", None)
         }
@@ -344,7 +350,7 @@ def build_tile_spec(dat_file_name, z, tile_width, tile_height, overlap_pixels, t
     default_stage_x = margin + round(image_col * (tile_width - overlap_pixels))
     default_stage_y = margin + round(image_row * (tile_height - overlap_pixels))
 
-    working_distance = tile_attributes["workingDistance"]
+    working_distance = tile_attributes["WD"]
     stage_x = tile_attributes.get("FirstX", default_stage_x)
     stage_y = tile_attributes.get("FirstY", default_stage_y)
 
