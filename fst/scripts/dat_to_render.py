@@ -56,7 +56,8 @@ def read_next_header_batch(dat_file_names, current_index, split_layer_groups):
                     if header_index >= current_index:
                         header = copy.deepcopy(layer_group["firstTileHeader"])
                         for key in unique_tile_header_keys:
-                            header[key] = layer[dat][key]
+                            if key in layer[dat]:
+                                header[key] = layer[dat][key]
                         headers.append(header)
                     header_index += 1
 
